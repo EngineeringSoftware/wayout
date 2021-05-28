@@ -1,0 +1,37 @@
+KOKKOS_DEVICES = "OpenMP"
+# TARGET = "kernel.cpython-38-x86_64-linux-gnu.so"
+
+SRC = $(wildcard *.cpp)
+
+default: build
+
+CXX = g++
+KOKKOS_ARCH = "BDW"
+
+PY_CFLAGS = $(shell python3-config --cflags)
+PY_CFLAGS := $(filter-out -flto, $(PY_CFLAGS))
+
+INCLUDES = -I${HOME}/pybind11/include -I$(PK_KOKKOS_KERNELS_INCLUDE_PATH_OMP) -I${HOME}/Kokkos/kokkos-kernels/test_common/ ${PY_CFLAGS} 
+CXXFLAGS = -O3 -std=c++14 -fPIC `python3 -m pybind11 --includes`
+
+LINK = ${CXX}
+DEPFLAGS = -M
+
+OBJ = $(SRC:.cpp=.o)
+LIB = 
+
+build: $(TARGET)
+
+$(TARGET): $(TARGET:.so=.o) 
+	$(LINK) -shared $(INCLUDES) $< -L$(PK_KOKKOS_KERNELS_LIB_PATH_OMP) -lkokkoskernels -o $(TARGET) $(PK_KOKKOS_LIB_PATH_OMP)/libkokkoscontainers.so $(PK_KOKKOS_LIB_PATH_OMP)/libkokkoscore.so
+
+%.o:%.cpp
+	$(CXX) $(INCLUDES) -fopenmp -isystem $(PK_KOKKOS_INCLUDE_PATH_OMP) $(CXXFLAGS) -c $<
+
+run: $(TARGET)
+	./$(TARGET)
+
+clean:
+	rm -f f_*.cpp
+	rm -f f_*.o
+	rm -f f_*.so

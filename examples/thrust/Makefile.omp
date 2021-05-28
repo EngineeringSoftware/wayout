@@ -1,0 +1,28 @@
+EXE = $(EXE_NAME).host
+
+SRC = $(wildcard *.cu)
+INCLUDES = -I${HOME}/thrust/
+
+default: build
+
+CXXFLAGS = -O3 -std=c++14 -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_OMP -xc++ 
+CXX = g++ 
+LINK = ${CXX}
+
+build: $(TARGET)
+
+OBJ = $(SRC:.cu=.o)
+
+build: $(EXE)
+
+$(EXE): $(OBJ)
+	$(LINK) -fopenmp $(OBJ) -o $(EXE)
+
+clean:
+	rm -f *.o $(EXE)
+
+# Compilation rules
+
+%.o:%.cu
+	$(CXX) $(INCLUDES) -fopenmp $(CXXFLAGS) -c $<
+

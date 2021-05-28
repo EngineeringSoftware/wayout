@@ -1,0 +1,121 @@
+import pykokkos as pk
+
+import argparse
+import copy
+import math
+import random
+import sys
+
+import kernels 
+from kernels import *
+
+def checkSizes(N, M, S, nrepeat):
+    # If S is undefined and N or M is undefined, set S to 2^22 or the bigger of N and M.
+    if ( S == -1 and ( N == -1 or M == -1 ) ):
+        S = 2**12
+        if ( S < N ):
+            S = N
+        if ( S < M ):
+            S = M
+
+    # If S is undefined and both N and M are defined, set S = N * M.
+    if ( S == -1 ):
+        S = N * M;
+
+    # If both N and M are undefined, fix row length to the smaller of S and 2^10 = 1024.
+    if ( N == -1 and M == -1 ):
+        if ( S > 1024 ):
+            M = 1024
+        else:
+          M = S
+
+    # If only M is undefined, set it.
+    if ( M == -1 ):
+        M = int(S / N)
+
+    # If N is undefined, set it.
+    if ( N == -1 ):
+        N = int(S / M)
+
+    print( "  Total size S = %d N = %d M = %d" % ( S, N, M ));
+
+    #  Check sizes.
+    if ( ( S < 0 ) or ( N < 0 ) or ( M < 0 ) or ( nrepeat < 0 ) ):
+        print( "  Sizes must be greater than 0." )
+        exit( 1 )
+
+    if ( ( N * M ) != S ):
+        print( "  N * M != S" )
+        exit( 1 )
+
+    return [N, M, S, nrepeat]
+
+
+def run() -> None: 
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-N', "-Rows", type=int, default=-1, help="exponent num, determines number of rows 2^num (default: 2^12 = 4096)");
+    parser.add_argument('-M', "-Columns", type=int, default=-1, help="exponent num, determines number of columns 2^num (default: 2^10 = 1024)");
+    parser.add_argument('-S', "-Size", type=int, default=-1, help="exponent num, determines total matrix size 2^num (default: 2^22 = 4096*1024 )");
+    parser.add_argument("-nrepeat", type=int, default=100, help="number of repetitions (default: 100)");
+    parser.add_argument('--cuda', action="store_true", help="use CUDA (default: 0)")
+    parser.add_argument('--file', type=str, help="output timing info to file") 
+    args = parser.parse_args()
+    N, M, S, nrepeat = checkSizes(args.N, args.M, args.S, args.nrepeat)
+    if args.cuda:
+        pk.enable_uvm()
+        pk.set_default_space(pk.Cuda)
+
+    timer = pk.Timer()
+    y: pk.View1D = pk.View([N], pk.double, layout=pk.Layout.LayoutRight)
+    x: pk.View1D = pk.View([M], pk.double, layout=pk.Layout.LayoutRight)
+    A: pk.View2D = pk.View([N, M], pk.double, layout=pk.Layout.LayoutRight)
+    
+    y.fill(1)
+    x.fill(1)
+    A.fill(1)
+
+    print( "  Using BLAS functions: gemv, dot" )
+    tmp: pk.View1D = pk.View([N], pk.double)
+    alpha = 1
+    beta = 0
+
+    init_time = timer.seconds()
+    timer.reset()
+    for repeat in range(nrepeat):
+        result = 0
+        gemv(char_ptr("N"), alpha, A, x, beta, tmp)
+        result = dot(y, tmp)
+
+        if repeat == nrepeat-1:
+            print( "    Computed result for %d x %d is %lf" % ( N, M, result ));
+
+            solution = float(N) * float(M);
+
+            if ( result != solution ):
+                print( "    Error: result( %lf ) != solution( %lf )" % ( result, solution ));
+
+    time = timer.seconds()
+
+    #  Calculate bandwidth.
+    #  Each matrix A row (each of length M) is read once.
+    #  The x vector (of length M) is read N times.
+    #  The y vector (of length N) is read once.
+    #  double Gbytes = 1.0e-9 * double( sizeof(double) * ( 2 * M * N + N ) );
+    sizeDouble = 8
+    Gbytes = 1.0e-9 * ( sizeDouble * ( M + M * N + N ) );
+
+    # Print results (problem size, time and bandwidth in GB/s).
+    print( "    N( %d ) M( %d ) nrepeat ( %d ) problem( %g MB ) time( %g s ) bandwidth( %g GB/s )" %
+            ( N, M, nrepeat, Gbytes * 1000, time, Gbytes * nrepeat / time ));
+
+    # outupt timing info
+    if args.file:
+        with open(args.file, "a") as f:
+            # workload, cuda, size1, size2, time
+            f.write("%s, %d, %d, %d, %f, %f\n" % ("inner", args.cuda, N, M, init_time, time))
+
+    #TODO: team based?
+ 
+if __name__ == "__main__":
+    run()

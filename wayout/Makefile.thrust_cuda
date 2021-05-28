@@ -1,0 +1,31 @@
+SRC = $(wildcard *.cpp)
+
+default: build
+
+CXX = nvcc 
+
+ARCH = sm_61
+INCLUDES = -I${HOME}/pybind11/include -I${HOME}/thrust/ -I${HOME}/thrust/dependencies/cub/
+CXXFLAGS = -arch=$(ARCH) -O3 -std=c++14 -Xcompiler -fPIC -x cu `python3 -m pybind11 --includes` -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CUDA
+
+LINK = ${CXX}
+DEPFLAGS = -M
+
+OBJ = $(SRC:.cpp=.o)
+LIB = 
+
+build: $(TARGET)
+
+$(TARGET): $(TARGET:.so=.o) 
+	$(LINK) -shared $(INCLUDES) $< -o $(TARGET) 
+
+%.o:%.cpp
+	$(CXX) $(INCLUDES) $(CXXFLAGS) -c $<
+
+run: $(TARGET)
+	./$(TARGET)
+
+clean:
+	rm -f f_*.cpp
+	rm -f f_*.o
+	rm -f f_*.so

@@ -1,0 +1,4 @@
+libclang==12.0.0
+pykokkos.egg==info
+numpy==1.18.5
+clang==11.0

@@ -1,0 +1,43 @@
+KOKKOS_PATH = ${HOME}/Kokkos/kokkos
+KOKKOS_DEVICES = "OpenMP"
+EXE = $(EXE_NAME).host
+
+SRC = $(wildcard *.cpp)
+
+default: build
+
+ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
+CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
+KOKKOS_ARCH = "Pascal61"
+KOKKOS_CUDA_OPTIONS = "enable_lambda"
+else
+CXX = g++
+KOKKOS_ARCH = "BDW"
+endif
+
+KOKKOS_KERNELS_INSTALL=${HOME}/Kokkos/kokkos-kernels-omp-install
+CXXFLAGS = -O3
+INCLUDES = -I${KOKKOS_KERNELS_INSTALL}/include -I${HOME}/Kokkos/kokkos-kernels/test_common/
+LINK = ${CXX}
+LINKFLAGS =
+
+DEPFLAGS = -M
+
+OBJ = $(SRC:.cpp=.o)
+LIB = -L${KOKKOS_KERNELS_INSTALL}/lib/ -lkokkoskernels
+
+build: $(EXE)
+
+$(EXE): $(OBJ)
+	$(LINK) -fopenmp $(OBJ) $(LIB) -o $(EXE) $(PK_KOKKOS_LIB_PATH_OMP)/libkokkoscontainers.so $(PK_KOKKOS_LIB_PATH_OMP)/libkokkoscore.so
+
+clean:
+	rm -f *.o $(EXE)
+
+# Compilation rules
+
+%.o:%.cpp
+	$(CXX) $(INCLUDES) -fopenmp -isystem $(PK_KOKKOS_INCLUDE_PATH_OMP) $(CXXFLAGS) -c $<
+
+test: $(EXE)
+	./$(EXE)
