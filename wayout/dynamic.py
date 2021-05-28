@@ -7,13 +7,22 @@ import re
 import typing
 import sys
 
-import pykokkos as pk
-from pykokkos.interface import Layout, MemorySpace, Trait
-from pykokkos.bindings import kokkos as lib
-
 # benchmark info
+import time
+
+class Timer:
+    def __init__(self):
+        self.start_time: float = time.perf_counter()
+
+    def seconds(self) -> float:
+        current_time: float = time.perf_counter()
+        return current_time - self.start_time
+
+    def reset(self) -> None:
+        self.start_time = time.perf_counter()
+
 total_build_time = 0
-timer = pk.Timer()
+timer = Timer()
 generated_ctors = set()
 generated_kernels = set()
 
@@ -28,9 +37,7 @@ class char_ptr:
 
 
 def get_handle(v):
-    if isinstance(v, pk.View):
-        return v.array
-    elif hasattr(v, "_handle"):
+    if hasattr(v, "_handle"):
         return v._handle
     elif isinstance(v, ptr) or isinstance(v, char_ptr):
         return get_handle(v.val)
@@ -46,98 +53,6 @@ class Operator(enum.Enum):
     SET_ITEM = "SET_ITEM_"
     CALL = "CALL_"
     DEREF = "DEREF_"
-
-
-def get_view_name(view):
-    shape = view.shape
-    dtype = view.dtype.value
-    space = view.space.value
-    layout = view.layout.value
-    trait = view.trait.value
-    _prefix = "KokkosView"
-    _space = lib.get_memory_space(space)
-    _dtype = lib.get_dtype(dtype)
-    _name = None
-    if layout is not None:
-        _layout = lib.get_layout(layout)
-        # LayoutRight is the default
-        if _layout != "LayoutRight":
-            _name = "{}_{}_{}_{}".format(_prefix, _dtype, _layout, _space)
-    if trait is not None:
-        _trait = lib.get_memory_trait(trait)
-        if _trait == "Unmanaged":
-            raise ValueError("Use unmanaged_array() for the unmanaged view memory trait")
-        _name = "{}_{}_{}_{}".format(_prefix, _dtype, _space, _trait)
-    if _name is None:
-        _name = "{}_{}_{}".format(_prefix, _dtype, _space)
-    _name = "{}_{}".format(_name, len(shape))
-    return _name
-
-
-def get_subview_name(subview):
-    dtype = subview.parent_view.dtype.value
-    space = subview.parent_view.space.value
-    _prefix = "KokkosView"
-    _dtype = lib.get_dtype(dtype)
-    _space = lib.get_memory_space(space)
-    _unmanaged = lib.get_memory_trait(lib.Unmanaged)
-    _name = "{}_{}_{}_{}_{}".format(_prefix, _dtype, _space, _unmanaged, subview.ndim)
-    return _name
-
-
-def get_cpp_view_name(view):
-    rank = view.rank()
-
-    if not 0 < rank < 8:
-        raise ValueError(f"View rank {rank} is not allowed")
-
-    dtype_mapping = {
-        pk.DataType.int16: "int16_t",
-        pk.DataType.int32: "int32_t",
-        pk.DataType.int64: "int64_t",
-        pk.DataType.uint16: "uint16_t",
-        pk.DataType.uint32: "uint32_t",
-        pk.DataType.uint64: "uint64_t",
-        pk.DataType.float: "float",
-        pk.DataType.double: "double"
-    }
-
-    params = {}
-    dtype = dtype_mapping[view.dtype]
-    if "const" in view.array.__class__.__name__:
-        dtype += " const"
-
-    params["dtype"] = dtype + "*" * rank
-
-    if view.trait != Trait.TraitDefault:
-        params["trait"] = f"Kokkos::MemoryTraits<Kokkos::{lib.get_memory_trait(view.trait.value)}>"
-
-    if view.layout != Layout.LayoutDefault:
-        params["layout"] = f"Kokkos::{lib.get_layout(view.layout.value)}"
-
-    if view.space != MemorySpace.MemorySpaceDefault:
-        params["space"] = f"Kokkos::{lib.get_memory_space(view.space.value)}"
-
-    if "space" not in params:
-        params["space"] = "Kokkos::DefaultExecutionSpace::memory_space"
-
-    params_ordered: List[str] = []
-    params_ordered.append(params["dtype"])
-    if "layout" in params:
-        params_ordered.append(params["layout"])
-    if "space" in params:
-        # FIXME
-        if params["space"] == "Kokkos::HostSpaceDevice":
-            params_ordered.append("Kokkos::Device<Kokkos::OpenMP, Kokkos::HostSpace>")
-        else:
-            params_ordered.append(params["space"])
-    if "trait" in params:
-        params_ordered.append(params["trait"])
-
-    cpp_type: str = "Kokkos::View<"
-    cpp_type += ",".join(params_ordered) + ">"
-
-    return cpp_type
 
 
 _cpp_types = {
@@ -175,8 +90,6 @@ def get_qualified_name(prefix, namespace, args, template_args):
             typename = _cpp_types[type(arg)]
         elif isinstance(arg, char_ptr):
             typename = "char *"
-        elif isinstance(arg, pk.View) or isinstance(arg, pk.Subview):
-            typename = get_cpp_view_name(arg)
         elif hasattr(arg, "_cpp_name"):
             typename = arg._cpp_name
         else:
@@ -209,8 +122,6 @@ def gen_arg_casts(buf, args):
 
         if type(arg) in _cpp_types:
             typename = _cpp_types[type(arg)]
-        elif isinstance(arg, pk.View) or isinstance(arg, pk.Subview):
-            typename = get_cpp_view_name(arg) + ref
         elif hasattr(arg, "_cpp_name"):
             typename = arg._cpp_name + ref
         # arg is enum
@@ -241,8 +152,6 @@ def get_cpp_name(prefix, namespace, template_args):
                 typename = arg
             elif arg in _cpp_types:
                 typename = _cpp_types[arg]
-            elif isinstance(arg, pk.View) or isinstance(arg, pk.Subview):
-                typename = get_cpp_view_name(arg)
             elif hasattr(arg, "_cpp_name"):
                 if arg._handle is not None:
                     print("Warning: using instance object as template argument!", file=sys.stderr)
@@ -554,6 +463,12 @@ def generate_func_binding(func_name, namespace, args, includes, template_args, t
     return (sys.modules[mod_name], name_hash)
 
 
+# register manually written bindings
+# assumes all binding names are of the format <class>_<t1>_<t2>_...
+_custom_types = {}
+def register_autocast(typename, cast):
+    _custom_types[typename] = cast
+
 def cast_return(res):
     if hasattr(res, "_cpp_type"):
         t = res._cpp_type
@@ -564,17 +479,11 @@ def cast_return(res):
         if begin != -1:
             t=t[begin+2:]
         return getattr(sys.modules["kernels"], t)(_handle=res)
-    elif type(res).__name__.startswith("KokkosView"):
-        # cast views
-        params = type(res).__name__.split("_")
-        dtype = pk.DataType(getattr(lib, params[1]))
-        layout_str = params[3] if params[2] == "const" else params[2]
-        if "Layout" not in layout_str:
-            layout = Layout.LayoutDefault
-        else:
-            layout = pk.Layout(getattr(lib, layout_str))
-        space = pk.MemorySpace(res.memory_space)
-        return pk.View(res.shape, dtype, layout=layout, space=space, array=res)
+
+    #TODO: find more flexible mechanism
+    t = type(res).__name__.split("_")[0]
+    if t in _custom_types:
+        return _custom_types[t](res)
     else:
         return res
 

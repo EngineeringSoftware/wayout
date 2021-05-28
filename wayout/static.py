@@ -461,7 +461,6 @@ class Target(enum.Enum):
     thrust_omp = "Makefile.thrust_omp"
     thrust_cuda = "Makefile.thrust_cuda"
 
-import pykokkos as pk
 def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
     output = []
     #FIXME need general way of getting header file name
