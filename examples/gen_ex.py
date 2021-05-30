@@ -176,6 +176,7 @@ def driver(exp_name, clean, target=wayout.Target.kokkos_omp):
     # clean up build directory
     if clean:
         os.system(f"rm -rf {exp_dir}/kernels.py")
+        os.system(f"rm -rf {exp_dir}/kernel")
         os.system(f"rm -rf {build_dir}")
 
     timer = pk.Timer()

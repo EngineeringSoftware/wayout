@@ -4,6 +4,8 @@
 
 kernels.py
 build/
+kernel/
+pk_cpp/
 omp_build/
 cuda_build/
 *.cuda

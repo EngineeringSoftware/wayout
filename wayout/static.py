@@ -16,7 +16,7 @@ import subprocess
 import clang.cindex as cindex
 
 namespace = None
-def traverse_ast(output, path, node, indent, functions, enums, build_dir, headers):
+def traverse_ast(outputs, path, node, indent, functions, enums, build_dir, headers):
     global namespace
     temp_namespace = namespace 
 
@@ -30,14 +30,27 @@ def traverse_ast(output, path, node, indent, functions, enums, build_dir, header
     if node.kind == cindex.CursorKind.NAMESPACE:
         temp_namespace = namespace
         if namespace != None:
+            # treat anonymous namespace as static
+            if node.spelling == "":
+                return
             namespace = namespace + "::" + node.spelling
         else:
             namespace = node.spelling
+
+    if namespace not in outputs:
+        # new namespace
+        namespace_str = f"\"{namespace}\"" if namespace else None
+        outputs[namespace] = [
+                '# Translation unit:'+path,
+                f"_namespace = {namespace_str}"]
+
 
     if node.kind == cindex.CursorKind.CLASS_TEMPLATE:
         # only parse class definitions
         if not node.is_definition():
             return
+
+        output = outputs[namespace]
         generate_class_header(node, build_dir, headers)
         generate_class(output, node)
         output.append("")
@@ -52,6 +65,7 @@ def traverse_ast(output, path, node, indent, functions, enums, build_dir, header
         if "<" in name:
             return
 
+        # keep track of overloading
         if name in functions:
             functions[name].append(node)
         else:
@@ -63,7 +77,7 @@ def traverse_ast(output, path, node, indent, functions, enums, build_dir, header
 
     # Recurse for children of this node
     for c in node.get_children():
-        traverse_ast(output, path, c, indent+1, functions, enums, build_dir, headers)
+        traverse_ast(outputs, path, c, indent+1, functions, enums, build_dir, headers)
 
     namespace = temp_namespace 
 
@@ -238,14 +252,11 @@ def generate_class(output, node):
     if node.brief_comment:
         output.append(f"\t\"\"\"{node.brief_comment}\"\"\"")
 
-    # namespace
-    output.append(f"\t_namespace = \"{namespace}\"")
-
     # class body
     # register class in init 
     output.extend(["\tdef __init__(self, *template_args, _handle=None):",
         "\t\tself._handle = _handle",
-        f"\t\tself._cpp_name = _handle._cpp_type if _handle else register_class(\"{node.spelling}\", self._namespace, template_args)"
+        f"\t\tself._cpp_name = _handle._cpp_type if _handle else register_class(\"{node.spelling}\", _namespace, template_args)"
         ""
     ])
 
@@ -387,9 +398,10 @@ def generate_class(output, node):
         output.append("\ttype = iterator_adaptor")
 
 
-def generate_functions(output, functions):
+def generate_functions(outputs, functions):
     for name, nodes in functions.items():
-        namespace = f"\"{nodes[0]}\"" if nodes[0] else None
+        # first item always namespace
+        output = outputs[nodes[0]]
         for node in nodes[1:]:
             params = []
             # define template types
@@ -405,8 +417,8 @@ def generate_functions(output, functions):
                 output.append(f"\"\"\"{node.raw_comment}\"\"\"")
 
         output.extend([
-            f"def {name}(*args, template_args=None, take_ownership=False, namespace={namespace}):",
-            f"\treturn call_func(\"{name}\", namespace, args, _includes, template_args, take_ownership)",
+            f"def {name}(*args, template_args=None, take_ownership=False):",
+            f"\treturn call_func(\"{name}\", _namespace, args, _includes, template_args, take_ownership)",
             "",
         ])
 
@@ -443,7 +455,6 @@ class Target(enum.Enum):
     thrust_cuda = "Makefile.thrust_cuda"
 
 def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
-    output = []
     #FIXME need general way of getting header file name
     if "thrust" in output_dir:
         #FIXME temp header to init vectors for benchmarks
@@ -456,7 +467,7 @@ def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
 
     # cindex.Config.set_library_file(LIB_PATH)
     index = cindex.Index.create()
-    output.extend([
+    preamble = [
         "import re",
         "import sys",
 
@@ -467,7 +478,7 @@ def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
         "",
         "_type_err_patt = re.compile(r\"-> (.*)\")",
         ""
-    ])
+    ]
 
     build_dir = output_dir + "/build/"
     makefile_path = Path(__file__).resolve().parent / target.value
@@ -478,6 +489,7 @@ def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
     enums = []
     parsed_paths = set(paths)
     queue = deque(paths)
+    outputs = {}
     while len(queue) > 0:
         path = str(Path(queue.popleft()).resolve())
         tu = index.parse(path, args=flags)
@@ -490,14 +502,33 @@ def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
                 queue.appendleft(inc_path)
         """
 
-        output.append('# Translation unit:'+tu.spelling)
+        # output.append('# Translation unit:'+tu.spelling)
         functions = {}
-        traverse_ast(output, path, tu.cursor, 0, functions, enums, build_dir, headers)
-        generate_functions(output, functions)
+        traverse_ast(outputs, path, tu.cursor, 0, functions, enums, build_dir, headers)
+        generate_functions(outputs, functions)
 
     generate_enums(build_dir, enums, headers)
 
-    with open(output_dir + "/kernels.py", "w") as f:
-        f.write("\n".join(output))
+    # name of root module
+    MODULE_NAME = "kernel"
+    # name of file containing wrappers
+    WRAPPER_NAME = "kernels"
+    for namespace, output in outputs.items():
+        path = output_dir + MODULE_NAME + "/"
+        if namespace:
+            path += namespace.replace("::", "/")
+        if not os.path.exists(path):
+            os.makedirs(path)
+            with open(path + "/__init__.py", "w") as f:
+                f.write(f"from .{WRAPPER_NAME} import *\n")
+                f.write("from importlib import import_module\n")
+                f.write("from pkgutil import walk_packages\n")
+                f.write("for loader, mod_name, is_pkg in walk_packages(__path__, __name__+'.'):\n")
+                f.write("\tif is_pkg:\n")
+                f.write("\t\timport_module(mod_name)\n")
+
+        with open(path + f"/{WRAPPER_NAME}.py", "w") as f:
+            f.write("\n".join(preamble))
+            f.write("\n".join(output))
     # print("\n".join(output))
 
