@@ -208,12 +208,12 @@ kokkos_benchmarks = {
 
 iter = 100
 thrust_benchmarks = {
-    # "thrust_sort": [2**27, iter],
-    # "thrust_sum": [2**30, iter],
-    # "thrust_saxpy": [2**28, iter], 
-    # "thrust_sparse": [2**25, iter],
-    # "thrust_mode": [2**26, iter],
-    # "thrust_set": [2**26, iter],
+    "thrust_sort": [2**27, iter],
+    "thrust_sum": [2**30, iter],
+    "thrust_saxpy": [2**28, iter], 
+    "thrust_sparse": [2**25, iter],
+    "thrust_mode": [2**26, iter],
+    "thrust_set": [2**26, iter],
     "thrust_histogram": [2**26, iter]
 }
 
@@ -334,17 +334,19 @@ def run_benchmarks(outfile, use_cuda, benchmarks):
             # subprocess.run(command, cwd=bench+"/")
 
 
-def benchmark(outfile, kokkos_outfile, build_info_outfile):
-        header = "workload, cuda, size1, size2, init_time, kernel_time"
-        os.system(f"rm -f {outfile}")
-        os.system(f"echo {header} > {outfile}")
-        os.system(f"rm -f {kokkos_outfile}")
-        os.system(f"echo {header} > {kokkos_outfile}")
+def benchmark(outfile, kokkos_outfile, build_info_outfile, build_only = False):
+        if not build_only:
+            header = "workload, cuda, size1, size2, init_time, kernel_time"
+            os.system(f"rm -f {outfile}")
+            os.system(f"echo {header} > {outfile}")
+            os.system(f"rm -f {kokkos_outfile}")
+            os.system(f"echo {header} > {kokkos_outfile}")
 
         # build and run kokkos
-        print("Kokkos:")
-        build_kokkos_benchmarks()
-        run_kokkos_benchmarks(kokkos_outfile)
+        if not build_only:
+            print("Kokkos:")
+            build_kokkos_benchmarks()
+            run_kokkos_benchmarks(kokkos_outfile)
 
         # clean build
         build_info = {}
@@ -357,7 +359,8 @@ def benchmark(outfile, kokkos_outfile, build_info_outfile):
         # OpenMP
         print("OpenMP:")
         build_benchmarks(False, build_info, kokkos_benchmarks)
-        run_benchmarks(outfile, False, kokkos_benchmarks)
+        if not build_only:
+            run_benchmarks(outfile, False, kokkos_benchmarks)
 
         # update makefile
         for bench in kokkos_benchmarks:
@@ -366,7 +369,11 @@ def benchmark(outfile, kokkos_outfile, build_info_outfile):
         # Cuda
         print("Cuda:")
         build_benchmarks(True, build_info, kokkos_benchmarks)
-        run_benchmarks(outfile, True, kokkos_benchmarks)
+        if not build_only:
+            run_benchmarks(outfile, True, kokkos_benchmarks)
+
+        if build_only:
+            return
 
         build_info_header = "workload, static_time, gcc_time, nvcc_time, num_mod, num_ctors, num_kernels"
         with open(build_info_outfile, "w") as f:
@@ -377,17 +384,19 @@ def benchmark(outfile, kokkos_outfile, build_info_outfile):
                     f"{info['num_mod']},{info['num_ctors']},{info['num_kernels']}\n")
 
 
-def thrust_benchmark(outfile, thrust_outfile, build_info_outfile):
-        header = "workload, cuda, size1, size2, init_time, kernel_time"
-        os.system(f"rm -f {outfile}")
-        os.system(f"echo {header} > {outfile}")
-        os.system(f"rm -f {thrust_outfile}")
-        os.system(f"echo {header} > {thrust_outfile}")
+def thrust_benchmark(outfile, thrust_outfile, build_info_outfile, build_only = False):
+        if not build_only:
+            header = "workload, cuda, size1, size2, init_time, kernel_time"
+            os.system(f"rm -f {outfile}")
+            os.system(f"echo {header} > {outfile}")
+            os.system(f"rm -f {thrust_outfile}")
+            os.system(f"echo {header} > {thrust_outfile}")
 
         # build and run thrust
-        print("Thrust:")
-        build_thrust_benchmarks()
-        run_thrust_benchmarks(thrust_outfile)
+        if not build_only:
+            print("Thrust:")
+            build_thrust_benchmarks()
+            run_thrust_benchmarks(thrust_outfile)
 
         # clean build
         build_info = {}
@@ -400,7 +409,8 @@ def thrust_benchmark(outfile, thrust_outfile, build_info_outfile):
         # OpenMP
         print("OpenMP:")
         build_benchmarks(False, build_info, thrust_benchmarks)
-        run_benchmarks(outfile, False, thrust_benchmarks)
+        if not build_only:
+            run_benchmarks(outfile, False, thrust_benchmarks)
 
         # update makefile
         for bench in thrust_benchmarks:
@@ -409,7 +419,11 @@ def thrust_benchmark(outfile, thrust_outfile, build_info_outfile):
         # Cuda
         print("Cuda:")
         build_benchmarks(True, build_info, thrust_benchmarks)
-        run_benchmarks(outfile, True, thrust_benchmarks)
+        if not build_only:
+            run_benchmarks(outfile, True, thrust_benchmarks)
+
+        if build_only:
+            return
 
         build_info_header = "workload, static_time, gcc_time, nvcc_time, num_mod, num_ctors, num_kernels"
         with open(build_info_outfile, "w") as f:
@@ -440,6 +454,8 @@ if __name__ == "__main__":
             print(f"==================== Run {i} ====================")
             i_ = f".{i}"
             benchmark(outfile+i_, kokkos_outfile+i_, build_info_outfile+i_)
+    elif exp_name == "build":
+        benchmark(None, None, None, build_only = True)
 
     elif exp_name == "thrust_bench":
         outfile = 'thrust_data/bench_res.csv'
@@ -452,6 +468,8 @@ if __name__ == "__main__":
             print(f"==================== Run {i} ====================")
             i_ = f".{i}"
             thrust_benchmark(outfile+i_, thrust_outfile+i_, build_info_outfile+i_)
+    elif exp_name == "thrust_build":
+        thrust_benchmark(None, None, None, build_only = True)
 
     elif exp_name == "all":
         for exp in _examples:

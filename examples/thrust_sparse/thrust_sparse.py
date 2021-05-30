@@ -1,4 +1,5 @@
 from kernels import *
+from wayout.dynamic import Timer
 
 import argparse
 
@@ -56,7 +57,7 @@ def run() -> None:
     N = 4
     if args.N:
         N = args.N
-    timer = pk.Timer()
+    timer = Timer()
 
     # A_index = device_vector(int)(4)
     # A_value = device_vector(float)(4)

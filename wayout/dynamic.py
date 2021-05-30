@@ -1,3 +1,4 @@
+import copy
 import enum
 import ctypes
 import hashlib
@@ -75,7 +76,7 @@ def import_module(lib_path, mod_name):
     spec.loader.exec_module(module)
 
 
-def get_qualified_name(prefix, namespace, args, template_args):
+def get_hash(prefix, namespace, args, template_args):
     if namespace:
         prefix = f"{namespace}::{prefix}"
 
@@ -105,7 +106,9 @@ def get_qualified_name(prefix, namespace, args, template_args):
     if template_args:
         template_str = f"<{get_cpp_name('', None, template_args)}>"
 
-    return f"{prefix}{template_str}({','.join(cpp_args)})"
+    qualified_name = f"{prefix}{template_str}({','.join(cpp_args)})"
+
+    return "f_" + hashlib.sha1(qualified_name.encode('utf-8')).hexdigest()
 
 
 # generate argument casts (expect list of instances) 
@@ -250,11 +253,17 @@ def gen_pybind_module(f, binding, name_hash, take_ownership):
     )
 
 
-def generate_constructor(class_cpp_name, args, includes):
+def call_constructor(cls_inst, args, includes):
+    if cls_inst._handle:
+        if hasattr(cls_inst, '__cpp_call__'):
+            return cls_inst.__cpp_call__(*args)
+        raise RuntimeError("Error: calling constructor on instance is forbidden!")
+
+    # check binding and generate
+    class_cpp_name = cls_inst._cpp_name
     generated_ctors.add(class_cpp_name)
 
-    qualified_name = get_qualified_name(class_cpp_name, None, args, None)
-    name_hash = "f_" + hashlib.sha1(qualified_name.encode('utf-8')).hexdigest()
+    name_hash = get_hash(class_cpp_name, None, args, None)
     mod_name = f"build.{name_hash}"
     mod_path = f"build/{name_hash}.so"
     if mod_name not in sys.modules:
@@ -294,17 +303,21 @@ def generate_constructor(class_cpp_name, args, includes):
             import_module(mod_path, mod_name)
             verify_return_registered(sys.modules[mod_name])
             
-    return (sys.modules[mod_name], name_hash)
+    # constructor invocation
+    args = [get_handle(arg) for arg in args]
+    inst = copy.copy(cls_inst)
+    inst._handle = getattr(sys.modules[mod_name], name_hash)(*args)
+    return inst
 
 
-def generate_class_func_binding(inst, func_name, args, includes, take_ownership):
+def call_class_func(inst, func_name, args, includes, take_ownership):
+    # check binding and generate
     generated_kernels.add(func_name)
 
     if inst._handle is None:
         raise TypeError("Attempted to call function on type object!")
 
-    qualified_name = get_qualified_name(inst._cpp_name + func_name, None, args, None)
-    name_hash = "f_" + hashlib.sha1(qualified_name.encode('utf-8')).hexdigest()
+    name_hash = get_hash(inst._cpp_name + func_name, None, args, None)
     mod_name = f"build.{name_hash}"
     mod_path = f"build/{name_hash}.so"
     if mod_name not in sys.modules:
@@ -345,7 +358,10 @@ def generate_class_func_binding(inst, func_name, args, includes, take_ownership)
             import_module(mod_path, mod_name)
             verify_return_registered(sys.modules[mod_name])
 
-    return (sys.modules[mod_name], name_hash)
+    # func invocation
+    args = [get_handle(arg) for arg in args]
+    res = getattr(sys.modules[mod_name], name_hash)(inst._handle, *args)
+    return cast_return(res)
 
 
 def generate_operator_binding(inst, args, op_type, includes):
@@ -355,8 +371,7 @@ def generate_operator_binding(inst, args, op_type, includes):
     if inst._handle is None:
         raise TypeError("Attempted to call function on type object!")
 
-    qualified_name = get_qualified_name(inst._cpp_name + func_name, None, args, None)
-    name_hash = "f_" + hashlib.sha1(qualified_name.encode('utf-8')).hexdigest()
+    name_hash = get_hash(inst._cpp_name + func_name, None, args, None)
     mod_name = f"build.{name_hash}"
     mod_path = f"build/{name_hash}.so"
     if mod_name not in sys.modules:
@@ -413,11 +428,11 @@ def generate_operator_binding(inst, args, op_type, includes):
     return (sys.modules[mod_name], name_hash)
 
 
-def generate_func_binding(func_name, namespace, args, includes, template_args, take_ownership):
+def call_func(func_name, namespace, args, includes, template_args, take_ownership):
+    # check binding and generate
     generated_kernels.add(func_name)
 
-    qualified_name = get_qualified_name(func_name, namespace, args, template_args)
-    name_hash = "f_" + hashlib.sha1(qualified_name.encode('utf-8')).hexdigest()
+    name_hash = get_hash(func_name, namespace, args, template_args)
     mod_name = f"build.{name_hash}"
     mod_path = f"build/{name_hash}.so"
     if mod_name not in sys.modules:
@@ -460,7 +475,10 @@ def generate_func_binding(func_name, namespace, args, includes, template_args, t
             import_module(mod_path, mod_name)
             verify_return_registered(sys.modules[mod_name])
 
-    return (sys.modules[mod_name], name_hash)
+    # func invocation
+    args = [get_handle(arg) for arg in args]
+    res = getattr(sys.modules[mod_name], name_hash)(*args)
+    return cast_return(res)
 
 
 # register manually written bindings

@@ -251,15 +251,7 @@ def generate_class(output, node):
 
     # call constructor
     output.extend(["\tdef __call__(self, *args):",
-        "\t\tif self._handle:",
-            f"\t\t\tif hasattr(self, '__cpp_call__'):",
-                f"\t\t\t\treturn self.__cpp_call__(*args)",
-            "\t\t\traise RuntimeError(\"Error: calling constructor on instance is forbidden!\")",
-        f"\t\tmod, name = generate_constructor(self._cpp_name, args, _includes)",
-        f"\t\targs = [get_handle(arg) for arg in args]",
-        f"\t\tinst = _copy.copy(self)",
-        f"\t\tinst._handle = getattr(mod, name)(*args)",
-        "\t\treturn inst",
+        f"\t\treturn call_constructor(self, args, _includes)",
         ""
     ])
 
@@ -346,7 +338,6 @@ def generate_class(output, node):
 
                 continue
 
-
             params = ["self"]
             for param in c.get_children():
                 if param.kind == cindex.CursorKind.PARM_DECL:
@@ -360,14 +351,9 @@ def generate_class(output, node):
                 comment = '\t\t'.join(c.raw_comment.splitlines(True))
                 output.append(f"\t\t\"\"\"{comment}\"\"\"")
 
-            output.extend([
-                f"\t\tmod, name = generate_class_func_binding(self, \"{child_name}\", args, _includes, take_ownership)",
-                "\t\targs = [get_handle(arg) for arg in args]",
-            ])
-            
-            # gen_guarded_invocation(2, "getattr(mod, name)(self._handle, *args)")
-            output.append("\t\tres = getattr(mod, name)(self._handle, *args)")
-            output.append("\t\treturn cast_return(res)")
+            output.append(
+                f"\t\treturn call_class_func(self, \"{child_name}\", args, _includes, take_ownership)"
+            )
 
         # public class variable
         elif c.kind == cindex.CursorKind.FIELD_DECL and \
@@ -420,14 +406,9 @@ def generate_functions(output, functions):
 
         output.extend([
             f"def {name}(*args, template_args=None, take_ownership=False, namespace={namespace}):",
-            f"\tmod, name = generate_func_binding(\"{name}\", namespace, args, _includes, template_args, take_ownership)",
-            "\targs = [get_handle(arg) for arg in args]",
+            f"\treturn call_func(\"{name}\", namespace, args, _includes, template_args, take_ownership)",
+            "",
         ])
-
-        # gen_guarded_invocation(1, "getattr(mod, name)(*args)")
-        output.append("\tres = getattr(mod, name)(*args)")
-        output.append("\treturn cast_return(res)")
-        output.append("")
 
 
 def generate_enums(build_dir, nodes, headers):
@@ -476,7 +457,6 @@ def generate_wrapper(output_dir, paths, flags=[], target=Target.kokkos_omp):
     # cindex.Config.set_library_file(LIB_PATH)
     index = cindex.Index.create()
     output.extend([
-        "import copy as _copy",
         "import re",
         "import sys",
 

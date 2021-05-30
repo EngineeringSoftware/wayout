@@ -78,9 +78,7 @@ try:
     pk.View._cpp_name = property(lambda v: _get_cpp_view_name(v))
     dynamic.register_autocast("KokkosView", _from_handle)
 
-
 except ModuleNotFoundError:
-    exit(1)
     pass
     
 

@@ -2,6 +2,7 @@ import argparse
 import random
 
 from kernels import *
+from wayout.dynamic import Timer
 
 def run() -> None: 
     parser = argparse.ArgumentParser()
@@ -15,7 +16,7 @@ def run() -> None:
     N = 100
     if args.N:
         N = args.N
-    timer = pk.Timer()
+    timer = Timer()
 
     # h_vec = host_vector(int)(100)
     # generate(h_vec.begin(), h_vec.end(), rand)

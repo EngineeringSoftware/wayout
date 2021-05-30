@@ -1,6 +1,7 @@
 from kernels import *
 
 import argparse
+from wayout.dynamic import Timer
 
 def run() -> None: 
     parser = argparse.ArgumentParser()
@@ -14,7 +15,7 @@ def run() -> None:
     N = 30
     if args.N:
         N = args.N
-    timer = pk.Timer()
+    timer = Timer()
 
     M = 10
     # rng = linear_congruential_engine(int, 48271, 0, 2147483647)() # typedef to default_random_engine

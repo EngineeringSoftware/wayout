@@ -1,4 +1,5 @@
 from kernels import *
+from wayout.dynamic import Timer
 
 import argparse
 
@@ -111,7 +112,7 @@ def run() -> None:
     args = parser.parse_args()
     if args.N:
         N = args.N
-    timer = pk.Timer()
+    timer = Timer()
 
     # generate random data on the host
     input_ = host_vector(int)(N)

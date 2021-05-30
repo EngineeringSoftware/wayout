@@ -1,4 +1,5 @@
 from kernels import *
+from wayout.dynamic import Timer
 
 import argparse
 
@@ -95,7 +96,7 @@ def run() -> None:
     N = 7
     if args.N:
         N = args.N
-    timer = pk.Timer()
+    timer = Timer()
 
     # a = [0,2,4,5,6,8,9]
     # b = [0,1,2,3,5,7,8]
