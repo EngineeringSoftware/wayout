@@ -7,8 +7,8 @@ import math
 import random
 import sys
 
-import kernels 
-from kernels import *
+import kernel
+from kernel import *
 
 DefaultExecSpace = "Kokkos::DefaultExecutionSpace"
 DefaultHostSpace = "Kokkos::DefaultExecutionSpace::memory_space"
@@ -23,9 +23,9 @@ def makeCrsMatrix(numRows):
     ind: pk.View1D = pk.View([nnz], pk.int32, layout=pk.Layout.LayoutLeft)
     val: pk.View1D = pk.View([nnz], pk.double, layout=pk.Layout.LayoutRight)
 
-    ptrIn: pk.View1D = create_mirror_view(ptr)
-    indIn: pk.View1D = create_mirror_view(ind) 
-    valIn: pk.View1D = create_mirror_view(val) 
+    ptrIn: pk.View1D = Kokkos.create_mirror_view(ptr)
+    indIn: pk.View1D = Kokkos.create_mirror_view(ind) 
+    valIn: pk.View1D = Kokkos.create_mirror_view(val) 
 
     two  =  2.0;
     mone = -1.0;
@@ -57,11 +57,12 @@ def makeCrsMatrix(numRows):
             valIn[2 + 3*(i-1) + 1] = two
             valIn[2 + 3*(i-1) + 2] = mone
 
-    deep_copy(ptr, ptrIn)
-    deep_copy(ind, indIn)
-    deep_copy(val, valIn)
+    Kokkos.deep_copy(ptr, ptrIn)
+    Kokkos.deep_copy(ind, indIn)
+    Kokkos.deep_copy(val, valIn)
 
-    return CrsMatrix(float, int, DefaultExecSpace, None, int)("AA", numRows, numCols, nnz, val, ptr, ind)
+    return KokkosSparse.CrsMatrix(float, int, DefaultExecSpace, None, int)(
+            "AA", numRows, numCols, nnz, val, ptr, ind)
     
 def run() -> None: 
     N = 1024
@@ -95,64 +96,64 @@ def run() -> None:
     Ap: pk.View1D = pk.View([N], pk.double, layout=pk.Layout.LayoutRight)
     r: pk.View1D = pk.View([N], pk.double, layout=pk.Layout.LayoutRight)
 
-    h_xx = create_mirror_view(xx)
+    h_xx = Kokkos.create_mirror_view(xx)
     for i in range(len(xx)):
         h_xx[i] = random.random()
 
-    deep_copy(xx, h_xx)
+    Kokkos.deep_copy(xx, h_xx)
 
     # b = A*xx
-    spmv(char_ptr("N"), one, A, xx, zero, b)
+    KokkosSparse.spmv(char_ptr("N"), one, A, xx, zero, b)
 
     # b -> r
-    deep_copy(r, b)
+    Kokkos.deep_copy(r, b)
 
-    fence()
+    Kokkos.fence()
 
     init_time = timer.seconds()
     timer.reset()
 
-    spmv(char_ptr("N"), one, A, x, zero, Ap); fence()
-    axpy(-1.0, Ap, r); fence()
+    KokkosSparse.spmv(char_ptr("N"), one, A, x, zero, Ap); Kokkos.fence()
+    KokkosBlas.axpy(-1.0, Ap, r); Kokkos.fence()
 
-    r_old_dot: float = dot(r, r); fence()
+    r_old_dot: float = KokkosBlas.dot(r, r); Kokkos.fence()
 
     norm_res = math.sqrt(r_old_dot)
     # r -> p
-    deep_copy(p, r); fence()
+    Kokkos.deep_copy(p, r); Kokkos.fence()
 
     k = 0
 
     while tolerance < norm_res and k < N:
         # Ap = A * p
-        spmv(char_ptr("N"), one, A, p, zero, Ap); fence()
+        KokkosSparse.spmv(char_ptr("N"), one, A, p, zero, Ap); Kokkos.fence()
         # pAp_dot = p' * A*p
-        pAp_dot: float = dot(p, Ap); fence()
+        pAp_dot: float = KokkosBlas.dot(p, Ap); Kokkos.fence()
         alpha: float = r_old_dot / pAp_dot
 
         # x = x + alpha*p
-        axpy(alpha, p, x)
+        KokkosBlas.axpy(alpha, p, x)
         # r = r + -alpha*A*p
-        axpy(-alpha, Ap, r)
+        KokkosBlas.axpy(-alpha, Ap, r)
 
-        r_dot: float = dot(r, r)
+        r_dot: float = KokkosBlas.dot(r, r)
         beta: float = r_dot / r_old_dot
 
         # p = r + beta*p
-        axpby(one, r, beta, p)
+        KokkosBlas.axpby(one, r, beta, p)
         r_old_dot = r_dot
         norm_res = math.sqrt(r_old_dot)
 
         k += 1
 
-        fence()
+        Kokkos.fence()
 
-    fence()
+    Kokkos.fence()
 
     time = timer.seconds()
 
-    axpby(one, x, -one, xx)
-    final_norm_res: float = math.sqrt(dot(xx, xx))
+    KokkosBlas.axpby(one, x, -one, xx)
+    final_norm_res: float = math.sqrt(KokkosBlas.dot(xx, xx))
 
     # Print results (problem size, time, number of iterations and final norm residual).
     print("Results: N( %d ), time( %g s), iterations( %d ), final norm_res(%.20lf)" %

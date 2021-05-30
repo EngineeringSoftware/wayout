@@ -484,8 +484,11 @@ def call_func(func_name, namespace, args, includes, template_args, take_ownershi
 # register manually written bindings
 # assumes all binding names are of the format <class>_<t1>_<t2>_...
 _custom_types = {}
-def register_autocast(typename, cast):
-    _custom_types[typename] = cast
+def register_manual_wrapper(wrapper_cls, cls_name):
+    assert hasattr(wrapper_cls, "_handle")
+    assert hasattr(wrapper_cls, "_cpp_name")
+    assert hasattr(wrapper_cls, "_from_handle")
+    _custom_types[cls_name] = wrapper_cls._from_handle
 
 def cast_return(res):
     if hasattr(res, "_cpp_type"):

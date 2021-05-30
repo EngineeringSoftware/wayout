@@ -2,7 +2,8 @@ import pykokkos as pk
 
 import sys
 
-import kernel as k
+import kernel
+from kernel import *
 
 @pk.workunit
 def CheckValue(i: int, lsum: pk.Acc[pk.double], y: pk.View1D[pk.double]):
@@ -15,8 +16,8 @@ def run() -> None:
     x = pk.View([N], dtype=pk.double)
     y = pk.View([N], dtype=pk.double)
 
-    k.Kokkos.deep_copy(x, -1)
-    k.KokkosBlas.abs(y, x)
+    Kokkos.deep_copy(x, -1)
+    KokkosBlas.abs(y, x)
 
     p = pk.RangePolicy(pk.get_default_space(), 0, N)
     sum_ = pk.parallel_reduce(p, CheckValue, y=y)

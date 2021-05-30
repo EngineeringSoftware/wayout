@@ -76,7 +76,8 @@ try:
 
     pk.View._handle = property(lambda v: v.array)
     pk.View._cpp_name = property(lambda v: _get_cpp_view_name(v))
-    dynamic.register_autocast("KokkosView", _from_handle)
+    pk.View._from_handle = _from_handle 
+    dynamic.register_manual_wrapper(pk.View, "KokkosView")
 
 except ModuleNotFoundError:
     pass
