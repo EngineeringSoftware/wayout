@@ -17,3 +17,17 @@ Install wayout as an editable python package by running:
 ```bash
 pip install --user -e .
 ```
+
+## Citation
+
+If you used WayOut in a research project please use this citation
+
+```
+@inproceedings{ZhuETAL21WayOut,
+  author = {Zhu, Steven and Al Awar, Nader and Erez, Mattan and Gligoric, Milos},
+  title = {Dynamic Generation of {P}ython Bindings for {HPC} Kernels},
+  booktitle = {International Conference on Automated Software Engineering},
+  pages = {92--103},
+  year = {2021},
+}
+```
