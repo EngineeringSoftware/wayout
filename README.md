@@ -1,6 +1,7 @@
-# Wayout 
+# WayOut
 
-This project is an attempt to dynamically generate Python bindings for C++ libraries.
+Dynamically generate Python bindings for C++ libraries.
+
 
 ## Installation
 
