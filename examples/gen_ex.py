@@ -3,6 +3,7 @@
 
 import sys
 import os
+from pathlib import Path
 import platform
 
 import pykokkos as pk
@@ -10,20 +11,13 @@ import wayout.static as wayout
 
 machine: str = platform.node()
 
-if machine == "xps2" or machine == "seoul":
-    # xps2
-    LIB_PATH="/usr/lib/x86_64-linux-gnu/libclang-6.0.so.1"
-    PROJECT_PATH="/home/jzhu2/Kokkos/"
-else:
-    # home
-    LIB_PATH="/usr/lib/libclang.so"
-    PROJECT_PATH="/home/steven/projects/"
-
+LIB_PATH="/usr/lib/libclang.so"
+PROJECT_PATH=str(Path.home()))
 
 KOKKOS_KERNEL_PATH=PROJECT_PATH+"kokkos-kernels/"
 INCLUDE_PATH=[PROJECT_PATH+"kokkos/core/", PROJECT_PATH+"kokkos/core/src/", KOKKOS_KERNEL_PATH+"src/", KOKKOS_KERNEL_PATH+"src/blas/impl/"]
 
-THRUST_PATH="/home/jzhu2/thrust/"
+THRUST_PATH=f"{PROJECT_PATH}/thrust/"
 THRUST_INCLUDE_PATH=[THRUST_PATH]
 THRUST_ITERATOR_PATHS = [
     "thrust/iterator/iterator_facade.h", 

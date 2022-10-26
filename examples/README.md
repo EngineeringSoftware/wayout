@@ -10,7 +10,6 @@ To build kokkos kernels, create a build/install directory in ~/Kokkos and in bui
 cmake ../kokkos-kernels -DCMAKE_CXX_COMPILER=<gxx> -DCMAKE_INSTALL_PREFIX=<prefix> -DCMAKE_CXX_FLAGS="-fPIC" -DKokkos_DIR=<kokkos_install>/lib/cmake/Kokkos -DKokkosKernels_ENABLE_TPL_CUBLAS=OFF -DKokkosKernels_ENABLE_TPL_CUSPARSE=OFF
 make -j install
 ```
-* disable cublas and cusparse because it has link issue on seoul for some reason
 * libclang==11.0.1
 
 The following environment variables need to be set to point to the path
